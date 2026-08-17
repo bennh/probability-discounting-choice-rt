@@ -1,0 +1,258 @@
+schema_version: 1
+
+project:
+  name: pd_joint_choice_rt
+  freeze_status: candidate  # candidate | frozen
+  freeze_version: v0
+  formal_run_b_enabled: false
+  pipeline_readiness:
+    formal_parameter_recovery_implemented: false
+    formal_model_recovery_implemented: false
+    report_statistics_implemented: false
+    run_b_one_shot_smoke_tested: false
+    notebook_end_to_end_implemented: false
+    formal_artifact_archival_approved: false
+    remote_run_reservation_approved: false
+
+random:
+  master_seed: 2026001
+  keyed_by: [stage, participant, run, model, replicate, start]
+
+data:
+  raw_archive: "data/raw/PD data.zip"
+  raw_directory: data/raw
+  raw_glob: "**/*.mat"
+  processed_trials: data/processed/pd_trials.csv
+  audit_report: data/processed/data_audit.json
+  matlab_keys:
+    run_a: data_train
+    run_b: data_test
+    labels: data_labels
+  columns:  # zero-based positions in the eight-column MATLAB matrices
+    r_cert: 0
+    r_uncert: 1
+    probability_percent: 2
+    raw_action: 3
+    p_cert: 4
+    condition_code: 5
+    rt_seconds: 6
+    odds_source: 7
+  expected:
+    participants: 49
+    trials_per_participant_run: 200
+    trials_per_condition_per_participant_run: 100
+    total_trials: 19600
+    missing_choice_trials: 68
+    valid_choice_trials: 19532
+    valid_rt_trials: 19532
+    raw_action_values: [0, 1, 2]
+    missing_action_code_trials: 68
+    nan_raw_action_trials: 0
+    nonfinite_amount_values: 0
+    probability_levels_unit: [0.10, 0.25, 0.50, 0.75, 0.90]
+    choice_rt_mask_mismatch_trials: 0
+    reward_amounts_positive: true
+    loss_amounts_negative: true
+  coding:
+    missing_action: 0
+    certain_action: 1
+    uncertain_action: 2
+    reward_condition: 1
+    loss_condition: 2
+  transforms:
+    probability_divisor: 100.0
+    amount_scale: 10.0
+    amount_scale_assertion: median_abs_r_cert_run_a
+    recompute_odds_from_probability: true
+    odds_assert_atol: 1.0e-10
+    use_p_cert_predictor: false
+  primary_inclusion:
+    choice: "raw_action in {1, 2}"
+    rt: "valid choice AND finite(rt_seconds) AND rt_seconds > 0"
+    masks_implemented_independently: true
+    keep_all_valid_rt: true
+  rt_sensitivity:
+    enabled: true
+    cutoff_source: run_a_global
+    quantiles_from_run_a: [0.005, 0.995]
+    apply_same_cutoffs_to: [A, B]
+    provisional_seconds: [0.275, 8.230]
+    resolved_seconds: null
+    censoring_model: none
+
+valuation:
+  family: hyperbolic_probability_discounting
+  odds_definition: "(1-p)/p"
+  condition_specific_k: true
+  retain_loss_sign: true
+
+choice:
+  family: logistic
+  uncertain_is_one: true
+  intercept: false
+  condition_specific_beta: false
+  baseline:
+    name: choice_only
+    fit_once: true
+    same_valuation_choice_data_bounds: true
+    remove_only_rt_likelihood: true
+
+rt:
+  observation_family: lognormal
+  loss_location_shift: true
+  include_seconds_jacobian: true
+  conditional_independence: true
+
+models:
+  M1:
+    enabled: true
+    predictor: abs_delta_v
+  M2:
+    enabled: true
+    predictor: delta_v_squared
+  M3:
+    enabled: true
+    predictor: mean_abs_subjective_value
+  M4:
+    enabled: false
+    predictor: relative_value_distance
+
+optimization:
+  estimation_level: participant
+  primary_estimator: mle
+  method: L-BFGS-B
+  multistarts: 20
+  max_iterations: 5000
+  ftol: 1.0e-10
+  gtol: 1.0e-6
+  bounds:  # candidate values; resolve and freeze after run-A/recovery checks
+    log_k_R: [-4.605170, 4.605170]
+    log_k_L: [-4.605170, 4.605170]
+    log_beta: [-4.605170, 4.605170]
+    alpha: [-3.0, 3.0]
+    delta_L: [-2.0, 2.0]
+    log_sigma: [-2.995732, 0.693147]
+    log_b:
+      M1: [-9.210340, 4.605170]
+      M2: [-11.512925, 2.302585]
+      M3: [-9.210340, 4.605170]
+  valid_fit:
+    require_optimizer_success: true
+    require_finite_objective: true
+    boundary_near_fraction: 0.01
+    # Diagnostic-only until calibrated in the locked numerical environment.
+    projected_gradient_inf_max: null
+  save_per_start:
+    [objective, success, message, iterations, gradient_norm, projected_gradient_norm, boundary_flags]
+
+map_fallback:
+  active: false
+  switch_all_full_models_and_baseline_together: true
+  rerun_complete_recovery_if_triggered: true
+  global_triggers:
+    nonconvergence_rate_gt: 0.05
+    shared_parameter_boundary_rate_gt: 0.05
+    shared_parameter_nrmse_gt: 0.30
+    calibration_slope_outside: [0.70, 1.30]
+    profile_interval_hits_both_bounds_rate_gt: 0.05
+  weak_priors:
+    log_k_R: {family: normal, mean: 0.0, sd: 2.0}
+    log_k_L: {family: normal, mean: 0.0, sd: 2.0}
+    log_beta: {family: normal, mean: 0.0, sd: 2.0}
+    alpha: {family: normal, mean: 0.693147, sd: 1.0}
+    delta_L: {family: normal, mean: 0.0, sd: 1.0}
+    log_sigma: {family: normal, mean: -0.693147, sd: 0.75}
+    log_b: {family: normal, scale_rule: run_a_predictor_g95, sd: 1.5}
+  prior_sensitivity_sd_multipliers: [0.5, 2.0]
+
+recovery:
+  generating_models: [M1, M2, M3]
+  synthetic_participants_per_model: 200
+  stress_participants_per_model: 50
+  parameter_sampler: latin_hypercube
+  fit_run: A
+  prediction_run: B
+  save_replicate_seeds: true
+  stimulus_design: real_participant_run_a_and_run_b
+  fit_choice_only_to_same_simulated_choices: true
+  generating_ranges:
+    log_k_R: [-2.302585, 2.302585]
+    log_k_L: [-2.302585, 2.302585]
+    log_beta: [-1.609438, 2.995732]
+    alpha: [0.0, 1.386294]
+    delta_L: [-0.5, 0.5]
+    log_sigma: [-1.609438, 0.0]
+  log_b_ranges:  # candidate model-specific ranges; resolve using run-A predictor scales
+    M1: [-2.302585, 0.693147]
+    M2: [-4.605170, 0.0]
+    M3: [-2.302585, 0.693147]
+  stress_set:
+    include_parameter_edges: true
+    include_run_b_extrapolation: true
+  report_metrics:
+    [bias, rmse, nrmse, calibration_intercept, calibration_slope, correlation,
+     optimizer_failure_rate, boundary_rate, parameter_error_correlation, profile_likelihood]
+
+model_recovery:
+  generating_models: [M1, M2, M3]
+  fit_models_to_synthetic_run_a: [M1, M2, M3]
+  selection_quantity: synthetic_run_b_rt_mlpd
+  output: generating_by_selected_confusion_matrix
+
+reliability:
+  primary: ICC_A_1_single_measure_absolute_agreement
+  sensitivity: spearman
+  fit_runs_independently: true
+  prohibit_run_a_initialization_for_run_b: true
+  paired_bootstrap_difference: true
+  diagnostics: [mean_shift_b_minus_a, bland_altman, paired_fit_count, boundary_rate]
+
+prediction:
+  prohibit_run_b_recalibration: true
+  aggregate_within_participant_condition_first: true
+  equal_participant_weight: true
+  choice_primary: bernoulli_mlp_d
+  choice_secondary: [brier_score, accuracy]
+  rt_primary: seconds_scale_lognormal_mlp_d
+  rt_secondary: [mae_log_rt, median_absolute_error_seconds]
+  rt_point_prediction: lognormal_median
+
+bootstrap:
+  resamples: 10000
+  unit: participant
+  confidence_level: 0.95
+  multiple_comparison_method: holm
+  carry_both_conditions_and_all_models_with_participant: true
+  report_paired_difference_and_ci: true
+
+comparison_families:
+  rt_models:
+    quantity: run_b_rt_mlpd
+    contrasts: all_pairwise_M1_M2_M3_by_condition
+  rt_informed_vs_choice_only:
+    quantity: run_b_choice_mlpd
+    contrasts: each_M1_M2_M3_vs_single_choice_only_by_condition
+  prohibit_joint_total_vs_choice_only_total: true
+  report_reward_and_loss_separately: true
+
+support_shift:
+  enabled: true
+  reference: participant_model_run_a_predictor_range
+  never_delete_out_of_support_trials: true
+  report: [out_of_support_trial_fraction, affected_participant_fraction,
+           in_support_scores, out_of_support_scores]
+
+run_b_guard:
+  require_frozen_config: true
+  require_formal_enable: true
+  refuse_overwrite: true
+  resume_policy: manual_audit_only
+  status_registry: config/formal_run_b_status.json
+  fingerprint: [config_sha256, git_commit, raw_data_sha256,
+                processed_data_sha256, run_a_fits_sha256, runtime_sha256]
+
+outputs:
+  manifest: results/manifest.csv
+  save_all_optimizer_starts: true
+  save_fit_diagnostics: true
+  save_trial_scores: true

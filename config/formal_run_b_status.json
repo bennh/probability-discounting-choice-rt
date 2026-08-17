@@ -1,0 +1,5 @@
+{
+  "status": "not_run",
+  "fingerprint": null,
+  "note": "This tracked registry is changed to in_progress before the one-shot run and completed only after success."
+}
