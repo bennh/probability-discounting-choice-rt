@@ -8,6 +8,15 @@ import numpy as np
 import pandas as pd
 
 
+def _positive_integer(name: str, value: Any) -> int:
+    if isinstance(value, (bool, np.bool_)) or not isinstance(value, (int, np.integer)):
+        raise ValueError(f"{name} must be a positive integer.")
+    result = int(value)
+    if result < 1:
+        raise ValueError(f"{name} must be a positive integer.")
+    return result
+
+
 def icc_a1(values: Any) -> float:
     """ICC(A,1): two-way random, absolute agreement, single measurement."""
 
@@ -40,7 +49,10 @@ def icc_a1(values: Any) -> float:
     # to multiplying every measurement by a small non-zero constant.
     if denominator == 0.0:
         return np.nan
-    return float((ms_participant - ms_error) / denominator)
+    result = float((ms_participant - ms_error) / denominator)
+    if not np.isfinite(result):
+        raise FloatingPointError("ICC computation produced a non-finite value.")
+    return result
 
 
 def bland_altman_summary(run_a: Any, run_b: Any) -> dict[str, float]:
@@ -84,12 +96,28 @@ def paired_bootstrap_icc_difference(
     missing = sorted(required - set(estimates.columns))
     if missing:
         raise ValueError(f"ICC bootstrap table is missing columns: {missing}")
-    if estimates[participant_column].astype(str).duplicated().any():
+    n_resamples = _positive_integer("n_boot", n_boot)
+    if (
+        not np.isfinite(minimum_valid_fraction)
+        or not 0.0 < minimum_valid_fraction <= 1.0
+    ):
+        raise ValueError("minimum_valid_fraction must lie in (0, 1].")
+    identifiers = estimates[participant_column]
+    if identifiers.isna().any() or identifiers.astype(str).str.strip().eq("").any():
+        raise ValueError("Participant IDs must be non-missing and non-empty.")
+    normalized_ids = identifiers.astype(str)
+    if normalized_ids.duplicated().any():
         raise ValueError("ICC bootstrap requires one keyed row per participant.")
+    prepared = estimates.copy()
+    prepared[participant_column] = normalized_ids
+    # Canonical ordering makes a seeded bootstrap invariant to input row order.
+    prepared = prepared.sort_values(participant_column, kind="stable").reset_index(drop=True)
     arrays = [
-        estimates[column].to_numpy(dtype=float)
+        pd.to_numeric(prepared[column], errors="raise").to_numpy(dtype=float)
         for column in (full_a_column, full_b_column, choice_a_column, choice_b_column)
     ]
+    if any(np.isinf(array).any() for array in arrays):
+        raise ValueError("ICC estimates must be finite or NaN; infinity is invalid.")
     valid = np.logical_and.reduce([np.isfinite(array) for array in arrays])
     arrays = [array[valid] for array in arrays]
     if arrays[0].size < 3:
@@ -97,20 +125,20 @@ def paired_bootstrap_icc_difference(
     observed = icc_a1(np.column_stack(arrays[:2])) - icc_a1(
         np.column_stack(arrays[2:])
     )
+    if not np.isfinite(observed):
+        raise RuntimeError("Observed ICC difference is undefined.")
     rng = np.random.default_rng(seed)
-    boot = np.empty(n_boot, dtype=float)
-    for index in range(n_boot):
+    boot = np.empty(n_resamples, dtype=float)
+    for index in range(n_resamples):
         sample = rng.integers(0, arrays[0].size, size=arrays[0].size)
         boot[index] = icc_a1(np.column_stack((arrays[0][sample], arrays[1][sample]))) - icc_a1(
             np.column_stack((arrays[2][sample], arrays[3][sample]))
         )
     finite = boot[np.isfinite(boot)]
-    if not 0.0 < minimum_valid_fraction <= 1.0:
-        raise ValueError("minimum_valid_fraction must lie in (0, 1].")
-    required_valid = int(np.ceil(n_boot * minimum_valid_fraction))
+    required_valid = int(np.ceil(n_resamples * minimum_valid_fraction))
     if finite.size < required_valid:
         raise RuntimeError(
-            f"Only {finite.size}/{n_boot} bootstrap ICC differences were defined; "
+            f"Only {finite.size}/{n_resamples} bootstrap ICC differences were defined; "
             f"required at least {required_valid}."
         )
     return {
@@ -118,4 +146,5 @@ def paired_bootstrap_icc_difference(
         "ci_low": float(np.quantile(finite, 0.025)),
         "ci_high": float(np.quantile(finite, 0.975)),
         "valid_bootstrap_resamples": int(finite.size),
+        "n_complete_participants": int(arrays[0].size),
     }

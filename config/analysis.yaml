@@ -37,10 +37,23 @@ data:
     condition_code: 5
     rt_seconds: 6
     odds_source: 7
+  column_labels:
+    r_cert: certOutcome
+    r_uncert: uncOutcome
+    probability_percent: outcome prob.
+    raw_action: "action (1=certain, 2=uncertain, 0=missing)"
+    p_cert: p_cert
+    condition_code: "condition (1=reward,2=loss)"
+    rt_seconds: RT
+    odds_source: odds
   expected:
     participants: 49
+    run_values: [A, B]
+    condition_values: [R, L]
+    trial_index_start: 1
     trials_per_participant_run: 200
     trials_per_condition_per_participant_run: 100
+    trials_per_probability_per_condition_per_participant_run: 20
     total_trials: 19600
     missing_choice_trials: 68
     valid_choice_trials: 19532
@@ -49,8 +62,15 @@ data:
     missing_action_code_trials: 68
     nan_raw_action_trials: 0
     nonfinite_amount_values: 0
+    nonfinite_probability_values: 0
+    nonfinite_odds_values: 0
     probability_levels_unit: [0.10, 0.25, 0.50, 0.75, 0.90]
+    odds_mismatch_trials: 0
+    choice_encoding_mismatch_trials: 0
+    choice_mask_definition_mismatch_trials: 0
+    rt_mask_definition_mismatch_trials: 0
     choice_rt_mask_mismatch_trials: 0
+    missing_action_with_observed_rt_trials: 0
     reward_amounts_positive: true
     loss_amounts_negative: true
   coding:
@@ -61,10 +81,11 @@ data:
     loss_condition: 2
   transforms:
     probability_divisor: 100.0
+    rt_divisor: 1000.0  # source RT is milliseconds; canonical RT is seconds
     amount_scale: 10.0
     amount_scale_assertion: median_abs_r_cert_run_a
     recompute_odds_from_probability: true
-    odds_assert_atol: 1.0e-10
+    odds_assert_atol: 1.0e-9  # source odds are rounded to 9 decimal places
     use_p_cert_predictor: false
   primary_inclusion:
     choice: "raw_action in {1, 2}"
@@ -77,6 +98,7 @@ data:
     quantiles_from_run_a: [0.005, 0.995]
     apply_same_cutoffs_to: [A, B]
     provisional_seconds: [0.275, 8.230]
+    provisional_assert_atol: 0.01
     resolved_seconds: null
     censoring_model: none
 
@@ -248,11 +270,14 @@ run_b_guard:
   refuse_overwrite: true
   resume_policy: manual_audit_only
   status_registry: config/formal_run_b_status.json
-  fingerprint: [config_sha256, git_commit, raw_data_sha256,
-                processed_data_sha256, run_a_fits_sha256, runtime_sha256]
+  fingerprint: [config_sha256, git_commit, raw_archive_sha256, raw_data_sha256,
+                processed_data_sha256, data_pipeline_sha256,
+                run_a_fits_sha256, run_a_receipt_sha256, runtime_sha256]
 
 outputs:
   manifest: results/manifest.csv
+  run_a_completion_receipt: results/run_a_completion.json
+  recovery_directory: results/recovery
   save_all_optimizer_starts: true
   save_fit_diagnostics: true
   save_trial_scores: true

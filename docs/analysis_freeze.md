@@ -12,7 +12,8 @@ project decisions, not results to be filled in after seeing held-out scores.
 - [ ] Hyperbolic valuation, condition-specific `k_R`/`k_L`, and shared `beta`
       approved.
 - [ ] Raw action encoding and independent choice/RT masks approved.
-- [ ] Probability, odds, amount-scale, and RT-sensitivity rules approved.
+- [ ] Probability `/100`, source RT `/1000` to seconds, odds tolerance `1e-9`,
+      amount-scale, and RT-sensitivity rules approved.
 - [ ] Primary/secondary metrics and participant-first aggregation approved.
 - [ ] Recovery, reliability, bootstrap, multiplicity, and support-shift plans
       approved.
@@ -44,7 +45,8 @@ project decisions, not results to be filled in after seeing held-out scores.
 - [ ] ICC definition, participant-cluster bootstrap, comparison families, and
       support-shift outputs are frozen.
 - [ ] Merten & Kollau (2026) source/BibTeX obtained from the teacher or LMS.
-- [ ] Config, Git, raw-data, processed-data, and run-A-fit fingerprints recorded.
+- [ ] Config, Git, raw-archive generation, raw-data, processed-data,
+      data-pipeline source, and run-A-fit fingerprints recorded.
 - [ ] Individual contribution/disclosure records prepared.
 - [ ] All members approve the exact frozen configuration.
 
@@ -63,6 +65,9 @@ project decisions, not results to be filled in after seeing held-out scores.
 | Freeze version | |
 | Config SHA256 | |
 | Git commit | |
+| Raw-source mode | |
+| Raw-archive SHA256 (if used) | |
 | Raw-data SHA256 | |
 | Processed-data SHA256 | |
+| Data-pipeline source SHA256 | |
 | Run-A fits SHA256 | |

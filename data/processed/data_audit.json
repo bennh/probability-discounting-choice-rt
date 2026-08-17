@@ -1,0 +1,64 @@
+{
+  "amount_scale_matches_expected": true,
+  "amount_scale_s0": 10.0,
+  "approved_for_fitting": true,
+  "choice_encoding_mismatch_trials": 0,
+  "choice_mask_definition_mismatch_trials": 0,
+  "choice_rt_mask_mismatch_trials": 0,
+  "condition_counts": {
+    "L": 9800,
+    "R": 9800
+  },
+  "count_deviations": {},
+  "data_config_sha256": "369bf0b3c8ba8666202f57620118a9868900558a4a1a19ef67eb464f48b7f429",
+  "data_pipeline_sha256": "ad8b23c6b44ff33f2658dca31d7f9a47e68d03d6357923897b151780dfa0808e",
+  "deviations": {},
+  "diagnostic_only": false,
+  "infinite_raw_action_trials": 0,
+  "infinite_rt_values": 0,
+  "integrity_deviations": {},
+  "invalid_probability_values": 0,
+  "loss_amount_sign_violations": 0,
+  "missing_action_code_trials": 68,
+  "missing_action_with_observed_rt_trials": 0,
+  "missing_choice_trials": 68,
+  "nan_raw_action_trials": 0,
+  "nonfinite_amount_values": 0,
+  "nonfinite_odds_values": 0,
+  "nonfinite_probability_values": 0,
+  "odds_mismatch_trials": 0,
+  "participants": 49,
+  "passed_expected_counts": true,
+  "passed_frozen_contract": true,
+  "passed_integrity_checks": true,
+  "prepared_at_utc": "2026-08-17T22:12:44.219847+00:00",
+  "probability_levels_unit": [
+    0.1,
+    0.25,
+    0.5,
+    0.75,
+    0.9
+  ],
+  "processed_data_sha256": "e2bb506ef9bd17c4b8e062646715087a07621486b7af1360eb8ceed5703b1835",
+  "raw_action_values": [
+    0.0,
+    1.0,
+    2.0
+  ],
+  "raw_archive_sha256": null,
+  "raw_data_sha256": "7f6b760de3f216e6eefd8024c82a5629fad721aadedf5a8a223b6a04f28c1d38",
+  "raw_source_mode": "direct_mat",
+  "reward_amount_sign_violations": 0,
+  "rt_mask_definition_mismatch_trials": 0,
+  "run_a_rt_sensitivity_seconds": [
+    0.2745740000261712,
+    8.230152000012415
+  ],
+  "run_counts": {
+    "A": 9800,
+    "B": 9800
+  },
+  "total_trials": 19600,
+  "valid_choice_trials": 19532,
+  "valid_rt_trials": 19532
+}

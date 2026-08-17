@@ -20,9 +20,22 @@ def parameter_by_condition(
     valid = np.isin(labels, ("R", "L"))
     if np.any(~valid):
         raise ValueError(f"Unknown condition labels: {np.unique(labels[~valid]).tolist()}")
-    if reward_value <= 0.0 or loss_value <= 0.0:
-        raise ValueError("Condition-specific discount parameters must be positive.")
-    return np.where(labels == "R", float(reward_value), float(loss_value))
+    reward = np.asarray(reward_value, dtype=float)
+    loss = np.asarray(loss_value, dtype=float)
+    if reward.ndim != 0 or loss.ndim != 0:
+        raise ValueError("Condition-specific discount parameters must be scalars.")
+    reward_scalar = float(reward)
+    loss_scalar = float(loss)
+    if (
+        not np.isfinite(reward_scalar)
+        or not np.isfinite(loss_scalar)
+        or reward_scalar <= 0.0
+        or loss_scalar <= 0.0
+    ):
+        raise ValueError(
+            "Condition-specific discount parameters must be finite and positive."
+        )
+    return np.where(labels == "R", reward_scalar, loss_scalar)
 
 
 def subjective_values(
@@ -37,23 +50,41 @@ def subjective_values(
 
     if not np.isfinite(s0) or s0 <= 0.0:
         raise ValueError("s0 must be finite and positive.")
-    certain, uncertain, odds_array, k_array = np.broadcast_arrays(
+    inputs = (
         np.asarray(r_cert, dtype=float),
         np.asarray(r_uncert, dtype=float),
         np.asarray(odds, dtype=float),
         np.asarray(k, dtype=float),
     )
+    non_scalar_shapes = {value.shape for value in inputs if value.ndim > 0}
+    if len(non_scalar_shapes) > 1:
+        raise ValueError(
+            "All non-scalar trial inputs must have exactly the same shape; "
+            "only scalar inputs may be broadcast."
+        )
+    certain, uncertain, odds_array, k_array = np.broadcast_arrays(*inputs)
     if np.any(~np.isfinite(certain)) or np.any(~np.isfinite(uncertain)):
-        raise ValueError("Reward amounts must be finite.")
+        raise ValueError("Outcome amounts must be finite.")
     if np.any(~np.isfinite(odds_array)) or np.any(odds_array < 0.0):
         raise ValueError("Odds must be finite and non-negative.")
     if np.any(~np.isfinite(k_array)) or np.any(k_array <= 0.0):
         raise ValueError("Discount parameters must be finite and positive.")
 
-    v_cert = certain / s0
-    v_uncert = (uncertain / s0) / (1.0 + k_array * odds_array)
-    delta_v = v_uncert - v_cert
-    if np.any(~np.isfinite(delta_v)):
+    with np.errstate(over="raise", divide="raise", invalid="raise"):
+        try:
+            denominator = 1.0 + k_array * odds_array
+            v_cert = certain / s0
+            v_uncert = (uncertain / s0) / denominator
+            delta_v = v_uncert - v_cert
+        except FloatingPointError as exc:
+            raise FloatingPointError(
+                "Subjective value computation exceeded the finite numeric range."
+            ) from exc
+    if (
+        np.any(~np.isfinite(v_cert))
+        or np.any(~np.isfinite(v_uncert))
+        or np.any(~np.isfinite(delta_v))
+    ):
         raise FloatingPointError("Subjective value computation produced non-finite values.")
     return SubjectiveValues(v_cert, v_uncert, delta_v)
 
@@ -74,4 +105,3 @@ def choice_probability(logits: Any) -> np.ndarray:
     if np.any(~np.isfinite(values)):
         raise ValueError("Choice logits must be finite.")
     return np.exp(-np.logaddexp(0.0, -values))
-

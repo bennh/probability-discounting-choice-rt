@@ -6,6 +6,9 @@ until Gate 2 is signed.
 
 ## Trial coding
 
+Convert the MATLAB RT source column from milliseconds to seconds before
+constructing masks or likelihood inputs: (T_i=\mathrm{RT}_{i,\mathrm{source}}/1000).
+
 Keep `raw_action` unchanged. Define a choice only when the source action is 1
 or 2:
 
@@ -116,4 +119,3 @@ log-normal score includes the Jacobian:
   Spearman correlations and Bland-Altman diagnostics.
 - Never compare the full joint total likelihood directly with the choice-only
   total likelihood.
-

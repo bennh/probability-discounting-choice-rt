@@ -78,8 +78,8 @@ python -m pytest -q
    supported.
 2. Put the official course LaTeX files in `report/` without changing their
    layout definitions.
-3. Check the raw MATLAB keys and the zero-based column positions in
-   `config/analysis.yaml` before preparing data.
+3. Check the raw MATLAB keys, exact column labels, and zero-based column
+   positions in `config/analysis.yaml` before preparing data.
 
 Raw data, processed participant-level data, optimizer traces, and simulation
 outputs are ignored by Git. Never commit identifying or course-restricted
@@ -99,9 +99,19 @@ metrics, random seeds, recovery design, and the run-B access rule.
 python scripts/prepare_data.py --config config/analysis.yaml
 ```
 
-This creates `data/processed/pd_trials.csv` and an audit JSON. The script
-checks action encoding, independent choice/RT masks, probability conversion,
-odds reconstruction, and expected dataset counts.
+This creates `data/processed/pd_trials.csv` and an audit JSON. Source RT is
+converted from milliseconds to seconds. The script checks the exact MATLAB
+schema, action encoding, independently derived choice/RT masks, probability
+conversion, odds reconstruction, trial identities, the A/B by reward/loss
+grid, and expected dataset counts. `--allow-count-deviations` can only create
+a diagnostic artifact; integrity failures are never bypassed and diagnostic
+data are blocked from fitting.
+
+When the configured ZIP exists, preparation extracts it into a directory named
+by the archive SHA256 and records that archive generation. Otherwise it uses
+only direct MAT files and excludes any older extracted directories. The audit
+also binds the processed CSV to the exact data-preparation source code, so a
+loader or archive change requires a fresh preparation run.
 
 ### 2. Run synthetic checks
 
@@ -116,10 +126,24 @@ CI runs only synthetic tests; it never accesses run B or private data.
 
 Use run A plus synthetic recovery to resolve parameter bounds and any global
 MLE-to-MAP fallback decision. Record changes in `docs/decision_log.md`.
-The repository currently implements the simulate-refit kernel and recovery
-summaries, but not the complete 200-participant parameter/model-recovery
-orchestration. Implement and validate that path before changing its readiness
-flags.
+The repository implements the complete configured parameter- and model-recovery
+orchestration. It simulates both runs from each real participant's stimulus
+design, fits run A, scores synthetic run B, and saves parameter summaries,
+the model-confusion matrix, seeds, runtime metadata, and an integrity receipt.
+After the group freezes the ranges and replicate counts, run it from a clean
+committed checkout:
+
+```bash
+python scripts/run_recovery.py \
+  --config config/analysis.yaml \
+  --formal \
+  --confirm-design-frozen
+```
+
+Formal outputs are written atomically to `results/recovery/`. The command
+refuses to overwrite an existing recovery directory. Inspect the fit-failure
+and boundary rates and the receipt before changing either recovery readiness
+flag to `true`.
 
 ### Gate 2: execution freeze
 

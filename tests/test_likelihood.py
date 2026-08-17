@@ -54,7 +54,50 @@ class LikelihoodTests(unittest.TestCase):
                 rt_mask=[True],
             )
 
+    def test_only_scalar_likelihood_inputs_are_broadcast(self):
+        observed = bernoulli_logpmf_from_logits([0.0, 1.0], 0.0)
+        np.testing.assert_allclose(observed, np.full(2, -np.log(2.0)))
+        with self.assertRaisesRegex(ValueError, "same shape"):
+            bernoulli_logpmf_from_logits(
+                np.array([[0.0], [1.0]]), np.array([0.0, 0.0])
+            )
+        with self.assertRaisesRegex(ValueError, "same shape"):
+            lognormal_logpdf(
+                np.array([[1.0], [2.0]]), np.array([0.0, 0.0]), 1.0
+            )
+
+    def test_joint_likelihood_requires_boolean_masks_and_scalar_sigma(self):
+        arguments = dict(
+            choice_uncertain=[0.0],
+            rt_seconds=[1.0],
+            logits=[0.0],
+            mu=[0.0],
+            sigma=1.0,
+            choice_mask=np.array([True]),
+            rt_mask=np.array([True]),
+        )
+        for name, invalid in (
+            ("choice_mask", np.array([1])),
+            ("rt_mask", np.array(["False"])),
+        ):
+            malformed = dict(arguments)
+            malformed[name] = invalid
+            with self.assertRaisesRegex(ValueError, "boolean dtype"):
+                joint_log_likelihood(**malformed)
+
+        nonscalar_sigma = dict(arguments)
+        nonscalar_sigma["sigma"] = np.array([1.0])
+        with self.assertRaisesRegex(ValueError, "sigma must be a scalar"):
+            joint_log_likelihood(**nonscalar_sigma)
+
+    def test_lognormal_numeric_overflow_fails_loudly(self):
+        with self.assertRaises(FloatingPointError):
+            lognormal_logpdf(
+                rt_seconds=np.finfo(float).max,
+                mu=-np.finfo(float).max,
+                sigma=np.finfo(float).tiny,
+            )
+
 
 if __name__ == "__main__":
     unittest.main()
-

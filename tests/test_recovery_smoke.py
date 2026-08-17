@@ -9,6 +9,7 @@ from pd_project.recovery import (
     latin_hypercube_parameters,
     model_recovery_confusion,
     recovery_metrics,
+    simulate_participant,
 )
 import pandas as pd
 from pd_project.valuation_choice import choice_logits, subjective_values
@@ -23,6 +24,23 @@ class RecoveryKernelSmokeTests(unittest.TestCase):
         )
         self.assertAlmostEqual(metrics["rmse"], 0.1)
         self.assertAlmostEqual(metrics["nrmse"], 0.05)
+
+    def test_recovery_failures_are_explicit_not_silently_dropped(self):
+        with self.assertRaisesRegex(ValueError, "success_mask"):
+            recovery_metrics(
+                [0.0, 1.0, 2.0],
+                [0.1, np.nan, 1.9],
+                parameter_range=2.0,
+            )
+        metrics = recovery_metrics(
+            [0.0, 1.0, 2.0],
+            [0.1, np.nan, 1.9],
+            parameter_range=2.0,
+            success_mask=np.array([True, False, True]),
+        )
+        self.assertEqual(metrics["n_total"], 3)
+        self.assertEqual(metrics["n_success"], 2)
+        self.assertAlmostEqual(metrics["optimizer_failure_rate"], 1.0 / 3.0)
 
     def test_model_recovery_aggregates_conditions_before_selecting(self):
         rows = []
@@ -59,6 +77,36 @@ class RecoveryKernelSmokeTests(unittest.TestCase):
         )
         with self.assertRaises(ValueError):
             model_recovery_confusion(incomplete)
+
+    def test_model_recovery_requires_matched_units_and_replicates(self):
+        rows = []
+        for generating in ("M1", "M2", "M3"):
+            for fitted in ("M1", "M2", "M3"):
+                for trial_index in (1, 2):
+                    rows.append(
+                        {
+                            "generating_model": generating,
+                            "replicate": 0,
+                            "fitted_model": fitted,
+                            "trial_index": trial_index,
+                            "run_b_rt_mlpd": -float(trial_index),
+                        }
+                    )
+        unequal = pd.DataFrame(rows).drop(index=0)
+        with self.assertRaisesRegex(ValueError, "same number"):
+            model_recovery_confusion(unequal)
+
+        mismatched_replicates = pd.DataFrame(rows)
+        extra = mismatched_replicates.loc[
+            mismatched_replicates["generating_model"] == "M1"
+        ].copy()
+        extra["replicate"] = 1
+        mismatched_replicates = pd.concat(
+            [mismatched_replicates, extra], ignore_index=True
+        )
+        with self.assertRaisesRegex(ValueError, "same replicate IDs"):
+            model_recovery_confusion(mismatched_replicates)
+
     def test_latin_hypercube_covers_each_stratum_once(self):
         samples = latin_hypercube_parameters(
             {"alpha": [0.0, 1.0], "log_sigma": [-2.0, 0.0]},
@@ -76,6 +124,61 @@ class RecoveryKernelSmokeTests(unittest.TestCase):
             self.assertTrue(np.all((values >= lower) & (values <= upper)))
             strata = np.floor((values - lower) / (upper - lower) * 8).astype(int)
             np.testing.assert_array_equal(np.sort(strata), np.arange(8))
+
+        with self.assertRaisesRegex(ValueError, "positive integer"):
+            latin_hypercube_parameters(
+                {"alpha": [0.0, 1.0]},
+                n_samples=1.5,
+                rng=np.random.default_rng(123),
+                log_b_range=(-3.0, 1.0),
+            )
+        with self.assertRaisesRegex(ValueError, "must be finite"):
+            latin_hypercube_parameters(
+                {"alpha": [0.0, np.inf]},
+                n_samples=2,
+                rng=np.random.default_rng(123),
+                log_b_range=(-3.0, 1.0),
+            )
+
+    def test_simulation_rejects_empty_design_and_nonfinite_parameters(self):
+        parameters = {
+            "log_k_R": 0.0,
+            "log_k_L": 0.0,
+            "log_beta": 0.0,
+            "alpha": 0.0,
+            "delta_L": 0.0,
+            "log_b": 0.0,
+            "log_sigma": -1.0,
+        }
+        columns = ["participant", "run", "condition", "r_cert", "r_uncert", "odds"]
+        with self.assertRaisesRegex(ValueError, "at least one trial"):
+            simulate_participant(
+                pd.DataFrame(columns=columns),
+                parameters,
+                "M1",
+                rng=np.random.default_rng(1),
+                s0=10.0,
+            )
+        design = pd.DataFrame(
+            {
+                "participant": ["p1"],
+                "run": ["A"],
+                "condition": ["R"],
+                "r_cert": [10.0],
+                "r_uncert": [20.0],
+                "odds": [1.0],
+            }
+        )
+        invalid = dict(parameters)
+        invalid["log_beta"] = np.nan
+        with self.assertRaisesRegex(ValueError, "must be finite"):
+            simulate_participant(
+                design,
+                invalid,
+                "M1",
+                rng=np.random.default_rng(1),
+                s0=10.0,
+            )
 
     def test_all_models_produce_finite_joint_objective(self):
         condition = np.array(["R", "L", "R", "L"])
