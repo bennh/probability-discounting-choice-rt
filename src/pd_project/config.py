@@ -140,13 +140,22 @@ def validate_config(config: dict[str, Any]) -> None:
         raise ValueError("M1, M2, and M3 must all be enabled in the primary analysis.")
     if config["models"].get("M4", {}).get("enabled") is True:
         raise ValueError("M4 is not implemented in the current public model interface.")
+
     map_active = config["map_fallback"].get("active")
     if not isinstance(map_active, bool):
         raise ValueError("map_fallback.active must be a YAML boolean.")
-    if map_active:
+
+    primary_estimator = config["optimization"].get("primary_estimator")
+    if primary_estimator not in {"mle", "map"}:
         raise ValueError(
-            "MAP fallback is not implemented in the current objective; keep it inactive."
+            "optimization.primary_estimator must be either 'mle' or 'map'."
         )
+    if primary_estimator == "map" and not map_active:
+        raise ValueError(
+            "MAP estimation requires map_fallback.active to be true."
+        )
+
+    _validate_map_fallback(config["map_fallback"])
 
     outputs = config["outputs"]
     required_outputs = {"manifest", "run_a_completion_receipt", "recovery_directory"}
@@ -209,6 +218,79 @@ def validate_config(config: dict[str, Any]) -> None:
         _validate_bound(name, bounds.get(name))
     for model in PRIMARY_MODELS:
         _validate_bound(f"log_b.{model}", bounds.get("log_b", {}).get(model))
+
+
+def _validate_map_fallback(map_config: Any) -> None:
+    if not isinstance(map_config, dict):
+        raise ValueError("map_fallback must be a mapping.")
+
+    priors = map_config.get("weak_priors")
+    if not isinstance(priors, dict):
+        raise ValueError("map_fallback.weak_priors must be a mapping.")
+
+    for name in (
+        "log_k_R",
+        "log_k_L",
+        "log_beta",
+        "alpha",
+        "delta_L",
+        "log_sigma",
+    ):
+        prior = priors.get(name)
+        if not isinstance(prior, dict):
+            raise ValueError(f"map_fallback.weak_priors.{name} must be a mapping.")
+        if prior.get("family") != "normal":
+            raise ValueError(
+                f"map_fallback.weak_priors.{name}.family must be 'normal'."
+            )
+        mean = float(prior.get("mean", float("nan")))
+        sd = float(prior.get("sd", float("nan")))
+        if not math.isfinite(mean):
+            raise ValueError(
+                f"map_fallback.weak_priors.{name}.mean must be finite."
+            )
+        if not math.isfinite(sd) or sd <= 0.0:
+            raise ValueError(
+                f"map_fallback.weak_priors.{name}.sd must be finite and positive."
+            )
+
+    log_b = priors.get("log_b")
+    if not isinstance(log_b, dict):
+        raise ValueError("map_fallback.weak_priors.log_b must be a mapping.")
+    if log_b.get("family") != "normal":
+        raise ValueError(
+            "map_fallback.weak_priors.log_b.family must be 'normal'."
+        )
+    if log_b.get("scale_rule") != "run_a_predictor_g95":
+        raise ValueError(
+            "map_fallback.weak_priors.log_b.scale_rule must be "
+            "'run_a_predictor_g95'."
+        )
+
+    sd = float(log_b.get("sd", float("nan")))
+    if not math.isfinite(sd) or sd <= 0.0:
+        raise ValueError(
+            "map_fallback.weak_priors.log_b.sd must be finite and positive."
+        )
+
+    resolved_g95 = log_b.get("resolved_g95")
+    if resolved_g95 is not None:
+        if not isinstance(resolved_g95, dict):
+            raise ValueError(
+                "map_fallback.weak_priors.log_b.resolved_g95 must be a mapping."
+            )
+        if set(resolved_g95) != PRIMARY_MODELS:
+            raise ValueError(
+                "map_fallback.weak_priors.log_b.resolved_g95 must define "
+                "exactly M1, M2, and M3."
+            )
+        for model in PRIMARY_MODELS:
+            value = float(resolved_g95[model])
+            if not math.isfinite(value) or value <= 0.0:
+                raise ValueError(
+                    f"map_fallback.weak_priors.log_b.resolved_g95.{model} "
+                    "must be finite and positive."
+                )
 
 
 def _validate_bound(name: str, bound: Any) -> None:
@@ -342,7 +424,10 @@ def _validate_data_contract(data: Any) -> None:
     if (
         not probability_levels
         or len(probability_levels) != len(set(probability_levels))
-        or any(not math.isfinite(value) or not 0.0 < value < 1.0 for value in probability_levels)
+        or any(
+            not math.isfinite(value) or not 0.0 < value < 1.0
+            for value in probability_levels
+        )
     ):
         raise ValueError(
             "data.expected.probability_levels_unit must contain unique open-unit values."
@@ -398,14 +483,21 @@ def _validate_data_contract(data: Any) -> None:
         or any(not 0.0 < float(value) < 1.0 for value in quantiles)
         or not float(quantiles[0]) < float(quantiles[1])
     ):
-        raise ValueError("data.rt_sensitivity quantiles must be two increasing open-unit values.")
+        raise ValueError(
+            "data.rt_sensitivity quantiles must be two increasing open-unit values."
+        )
     if (
         not isinstance(provisional, list)
         or len(provisional) != 2
-        or any(not math.isfinite(float(value)) or float(value) <= 0.0 for value in provisional)
+        or any(
+            not math.isfinite(float(value)) or float(value) <= 0.0
+            for value in provisional
+        )
         or not float(provisional[0]) < float(provisional[1])
     ):
-        raise ValueError("data.rt_sensitivity.provisional_seconds must be increasing positive values.")
+        raise ValueError(
+            "data.rt_sensitivity.provisional_seconds must be increasing positive values."
+        )
     provisional_atol = float(
         rt_sensitivity.get("provisional_assert_atol", float("nan"))
     )
@@ -428,11 +520,15 @@ def _validate_data_contract(data: Any) -> None:
             "trials per probability."
         )
     if expected["total_trials"] != participants * 2 * per_run:
-        raise ValueError("Expected total_trials is inconsistent with participants and runs.")
+        raise ValueError(
+            "Expected total_trials is inconsistent with participants and runs."
+        )
     if expected["valid_choice_trials"] + expected["missing_choice_trials"] != expected[
         "total_trials"
     ]:
-        raise ValueError("Expected valid and missing choice counts do not sum to total_trials.")
+        raise ValueError(
+            "Expected valid and missing choice counts do not sum to total_trials."
+        )
     if expected["valid_rt_trials"] > expected["valid_choice_trials"]:
         raise ValueError("Expected valid_rt_trials cannot exceed valid_choice_trials.")
 

@@ -1,0 +1,13 @@
+{
+  "byteorder": "little",
+  "implementation": "CPython",
+  "machine": "arm64",
+  "packages": {
+    "PyYAML": "6.0.2",
+    "numpy": "1.26.4",
+    "pandas": "2.2.3",
+    "scipy": "1.13.1"
+  },
+  "python": "3.11.15",
+  "system": "Darwin"
+}

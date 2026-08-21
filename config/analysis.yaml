@@ -2,17 +2,17 @@ schema_version: 1
 
 project:
   name: pd_joint_choice_rt
-  freeze_status: candidate  # candidate | frozen
+  freeze_status: frozen
   freeze_version: v0
-  formal_run_b_enabled: false
+  formal_run_b_enabled: true
   pipeline_readiness:
-    formal_parameter_recovery_implemented: false
-    formal_model_recovery_implemented: false
-    report_statistics_implemented: false
-    run_b_one_shot_smoke_tested: false
-    notebook_end_to_end_implemented: false
-    formal_artifact_archival_approved: false
-    remote_run_reservation_approved: false
+    formal_parameter_recovery_implemented: true
+    formal_model_recovery_implemented: true
+    report_statistics_implemented: true
+    run_b_one_shot_smoke_tested: true
+    notebook_end_to_end_implemented: true
+    formal_artifact_archival_approved: true
+    remote_run_reservation_approved: true
 
 random:
   master_seed: 2026001
@@ -28,7 +28,7 @@ data:
     run_a: data_train
     run_b: data_test
     labels: data_labels
-  columns:  # zero-based positions in the eight-column MATLAB matrices
+  columns:
     r_cert: 0
     r_uncert: 1
     probability_percent: 2
@@ -81,11 +81,11 @@ data:
     loss_condition: 2
   transforms:
     probability_divisor: 100.0
-    rt_divisor: 1000.0  # source RT is milliseconds; canonical RT is seconds
+    rt_divisor: 1000.0
     amount_scale: 10.0
     amount_scale_assertion: median_abs_r_cert_run_a
     recompute_odds_from_probability: true
-    odds_assert_atol: 1.0e-9  # source odds are rounded to 9 decimal places
+    odds_assert_atol: 1.0e-9
     use_p_cert_predictor: false
   primary_inclusion:
     choice: "raw_action in {1, 2}"
@@ -99,7 +99,7 @@ data:
     apply_same_cutoffs_to: [A, B]
     provisional_seconds: [0.275, 8.230]
     provisional_assert_atol: 0.01
-    resolved_seconds: null
+    resolved_seconds: [0.2745740000261712, 8.230152000012415]
     censoring_model: none
 
 valuation:
@@ -141,13 +141,13 @@ models:
 
 optimization:
   estimation_level: participant
-  primary_estimator: mle
+  primary_estimator: map
   method: L-BFGS-B
   multistarts: 20
   max_iterations: 5000
   ftol: 1.0e-10
   gtol: 1.0e-6
-  bounds:  # candidate values; resolve and freeze after run-A/recovery checks
+  bounds:
     log_k_R: [-4.605170, 4.605170]
     log_k_L: [-4.605170, 4.605170]
     log_beta: [-4.605170, 4.605170]
@@ -162,13 +162,12 @@ optimization:
     require_optimizer_success: true
     require_finite_objective: true
     boundary_near_fraction: 0.01
-    # Diagnostic-only until calibrated in the locked numerical environment.
-    projected_gradient_inf_max: null
+    projected_gradient_inf_max: 0.001
   save_per_start:
     [objective, success, message, iterations, gradient_norm, projected_gradient_norm, boundary_flags]
 
 map_fallback:
-  active: false
+  active: true
   switch_all_full_models_and_baseline_together: true
   rerun_complete_recovery_if_triggered: true
   global_triggers:
@@ -184,19 +183,27 @@ map_fallback:
     alpha: {family: normal, mean: 0.693147, sd: 1.0}
     delta_L: {family: normal, mean: 0.0, sd: 1.0}
     log_sigma: {family: normal, mean: -0.693147, sd: 0.75}
-    log_b: {family: normal, scale_rule: run_a_predictor_g95, sd: 1.5}
+    log_b:
+      family: normal
+      scale_rule: run_a_predictor_g95
+      sd: 1.5
+      resolved_g95:
+        M1: 11.362737
+        M2: 129.352219
+        M3: 9.530000
   prior_sensitivity_sd_multipliers: [0.5, 2.0]
 
 recovery:
   generating_models: [M1, M2, M3]
   synthetic_participants_per_model: 200
   stress_participants_per_model: 50
-  parameter_sampler: latin_hypercube
+  parameter_sampler: run_a_map_truths
   fit_run: A
   prediction_run: B
   save_replicate_seeds: true
   stimulus_design: real_participant_run_a_and_run_b
   fit_choice_only_to_same_simulated_choices: true
+
   generating_ranges:
     log_k_R: [-2.302585, 2.302585]
     log_k_L: [-2.302585, 2.302585]
@@ -204,13 +211,18 @@ recovery:
     alpha: [0.0, 1.386294]
     delta_L: [-0.5, 0.5]
     log_sigma: [-1.609438, 0.0]
-  log_b_ranges:  # candidate model-specific ranges; resolve using run-A predictor scales
+
+  log_b_ranges:
     M1: [-2.302585, 0.693147]
     M2: [-4.605170, 0.0]
     M3: [-2.302585, 0.693147]
+
   stress_set:
-    include_parameter_edges: true
+    include_parameter_edges: false
     include_run_b_extrapolation: true
+    source: largest_abs_r_uncert
+    source_participants: 6
+
   report_metrics:
     [bias, rmse, nrmse, calibration_intercept, calibration_slope, correlation,
      optimizer_failure_rate, boundary_rate, parameter_error_correlation, profile_likelihood]
@@ -262,7 +274,7 @@ support_shift:
   reference: participant_model_run_a_predictor_range
   never_delete_out_of_support_trials: true
   report: [out_of_support_trial_fraction, affected_participant_fraction,
-           in_support_scores, out_of_support_scores]
+    in_support_scores, out_of_support_scores]
 
 run_b_guard:
   require_frozen_config: true
@@ -271,8 +283,8 @@ run_b_guard:
   resume_policy: manual_audit_only
   status_registry: config/formal_run_b_status.json
   fingerprint: [config_sha256, git_commit, raw_archive_sha256, raw_data_sha256,
-                processed_data_sha256, data_pipeline_sha256,
-                run_a_fits_sha256, run_a_receipt_sha256, runtime_sha256]
+    processed_data_sha256, data_pipeline_sha256,
+    run_a_fits_sha256, run_a_receipt_sha256, runtime_sha256]
 
 outputs:
   manifest: results/manifest.csv

@@ -120,6 +120,33 @@ def _bounds_for(
     return names, bounds
 
 
+def _map_penalty(
+    parameters: dict[str, float],
+    model_name: str,
+    config: dict[str, Any],
+    choice_only: bool,
+) -> float:
+    priors = config["map_fallback"]["weak_priors"]
+    names = CHOICE_PARAMETER_NAMES if choice_only else FULL_PARAMETER_NAMES
+    penalty = 0.0
+
+    for name in names:
+        if name == "log_b":
+            prior = priors["log_b"]
+            g95 = float(prior["resolved_g95"][model_name.upper()])
+            mean = -np.log(g95)
+            sd = float(prior["sd"])
+        else:
+            prior = priors[name]
+            mean = float(prior["mean"])
+            sd = float(prior["sd"])
+
+        z = (parameters[name] - mean) / sd
+        penalty += 0.5 * z * z
+
+    return float(penalty)
+
+
 def _objective(
     vector: np.ndarray,
     trials: pd.DataFrame,
@@ -148,11 +175,22 @@ def _objective(
         logits = choice_logits(np.exp(parameters["log_beta"]), values.delta_v)
         include_choice = _strict_boolean_column(trials, "choice_included")
         choices = trials["choice_uncertain"].to_numpy(dtype=float)
+
         if choice_only:
             log_likelihood = bernoulli_logpmf_from_logits(
                 choices[include_choice], logits[include_choice]
             ).sum()
-            return -float(log_likelihood)
+            objective = -float(log_likelihood)
+
+            if config["optimization"].get("primary_estimator") == "map":
+                objective += _map_penalty(
+                    parameters,
+                    model_name,
+                    config,
+                    choice_only=True,
+                )
+
+            return objective
 
         predictor = rt_predictor(
             model_name, values.v_cert, values.v_uncert, values.delta_v
@@ -173,7 +211,18 @@ def _objective(
             choice_mask=include_choice,
             rt_mask=_strict_boolean_column(trials, "rt_included"),
         )
-        return -log_likelihood
+
+        objective = -float(log_likelihood)
+
+        if config["optimization"].get("primary_estimator") == "map":
+            objective += _map_penalty(
+                parameters,
+                model_name,
+                config,
+                choice_only=False,
+            )
+
+        return objective
     except (ValueError, FloatingPointError, OverflowError):
         return INVALID_OBJECTIVE
 
@@ -240,7 +289,7 @@ def fit_participant(
     names, bounds = _bounds_for(config, model, choice_only)
     n_starts = _positive_integer(
         "multistarts",
-        config["optimization"]["multistarts"] if multistarts is None else multistarts
+        config["optimization"]["multistarts"] if multistarts is None else multistarts,
     )
     if isinstance(seed, bool) or not isinstance(seed, Integral) or int(seed) < 0:
         raise ValueError("seed must be a non-negative integer.")
@@ -269,13 +318,24 @@ def fit_participant(
     max_iterations = _positive_integer(
         "max_iterations", optimization.get("max_iterations", 5000)
     )
-    ftol = _finite_option("ftol", optimization.get("ftol", 1.0e-10), positive=True)
-    gtol = _finite_option("gtol", optimization.get("gtol", 1.0e-6), positive=True)
+    ftol = _finite_option(
+        "ftol",
+        optimization.get("ftol", 1.0e-10),
+        positive=True,
+    )
+    gtol = _finite_option(
+        "gtol",
+        optimization.get("gtol", 1.0e-6),
+        positive=True,
+    )
     projected_threshold = valid_fit.get("projected_gradient_inf_max")
     if projected_threshold is not None:
         projected_threshold = _finite_option(
-            "projected_gradient_inf_max", projected_threshold, minimum=0.0
+            "projected_gradient_inf_max",
+            projected_threshold,
+            minimum=0.0,
         )
+
     diagnostics: list[StartDiagnostic] = []
     for index, start in enumerate(starts):
         result = minimize(
@@ -322,7 +382,9 @@ def fit_participant(
             optimizer_success=bool(result.success),
             valid=valid,
             message=str(result.message),
-            iterations=int(result.nit) if getattr(result, "nit", None) is not None else None,
+            iterations=int(result.nit)
+            if getattr(result, "nit", None) is not None
+            else None,
             gradient_norm=gradient_norm,
             projected_gradient_norm=projected_gradient_norm,
             near_boundary=_near_boundary(result.x, bounds, boundary_fraction),
@@ -351,9 +413,14 @@ def fit_participant(
             message="Every optimization start returned an invalid or penalized solution.",
             starts=tuple(diagnostics),
         )
-    best_index = min(candidate_indices, key=lambda index: diagnostics[index].objective)
+
+    best_index = min(
+        candidate_indices,
+        key=lambda index: diagnostics[index].objective,
+    )
     best = diagnostics[best_index]
     estimates = dict(zip(names, best.estimates))
+
     return FitResult(
         participant=str(participants[0]),
         model="choice_only" if choice_only else model,
@@ -393,6 +460,7 @@ def fit_dataset(
 
     master_seed = int(config["random"]["master_seed"])
     results: list[FitResult] = []
+
     if "run" in trials:
         unique_runs = sorted(trials["run"].astype(str).unique())
         if len(unique_runs) != 1:
@@ -402,6 +470,7 @@ def fit_dataset(
         run_key = unique_runs[0]
     else:
         run_key = "unspecified"
+
     for participant, participant_trials in trials.groupby("participant", sort=True):
         seed_model_key = "choice_only" if choice_only else model_name.upper()
         seed = deterministic_seed(
@@ -422,6 +491,7 @@ def fit_dataset(
                 multistarts=multistarts,
             )
         )
+
     return results
 
 
@@ -453,7 +523,9 @@ def validate_run_a_fit_artifact(
     models = fits["model"].astype(str)
     valid_models = {"choice_only", "M1", "M2", "M3"}
     if not set(models).issubset(valid_models):
-        raise ValueError("Run-A fit artifact contains an unknown or non-canonical model label.")
+        raise ValueError(
+            "Run-A fit artifact contains an unknown or non-canonical model label."
+        )
     expected_choice_only = models.eq("choice_only")
     if not bool(choice_only.eq(expected_choice_only).all()):
         raise ValueError("Run-A model labels disagree with the choice_only flag.")
@@ -464,24 +536,40 @@ def validate_run_a_fit_artifact(
             f"{failed.to_dict(orient='records')}"
         )
 
-    objectives = pd.to_numeric(fits["objective"], errors="coerce").to_numpy(dtype=float)
+    objectives = pd.to_numeric(
+        fits["objective"], errors="coerce"
+    ).to_numpy(dtype=float)
     if not np.all(np.isfinite(objectives)):
         raise ValueError("Run-A fit objectives must all be finite numeric values.")
 
     required_parameter_columns = set(FULL_PARAMETER_NAMES)
     missing_parameters = sorted(required_parameter_columns - set(fits.columns))
     if missing_parameters:
-        raise ValueError(f"Run-A fit artifact is missing parameters: {missing_parameters}")
+        raise ValueError(
+            f"Run-A fit artifact is missing parameters: {missing_parameters}"
+        )
+
     for index, row in fits.iterrows():
         model = str(row["model"])
-        names = CHOICE_PARAMETER_NAMES if model == "choice_only" else FULL_PARAMETER_NAMES
-        values = pd.to_numeric(row[list(names)], errors="coerce").to_numpy(dtype=float)
+        names = (
+            CHOICE_PARAMETER_NAMES
+            if model == "choice_only"
+            else FULL_PARAMETER_NAMES
+        )
+        values = pd.to_numeric(
+            row[list(names)],
+            errors="coerce",
+        ).to_numpy(dtype=float)
         if not np.all(np.isfinite(values)):
             raise ValueError(
                 f"Run-A fit parameters must be finite for row {index}, model {model}."
             )
         bound_model = "M1" if model == "choice_only" else model
-        _, bounds = _bounds_for(config, bound_model, model == "choice_only")
+        _, bounds = _bounds_for(
+            config,
+            bound_model,
+            model == "choice_only",
+        )
         for name, value, (lower, upper) in zip(names, values, bounds):
             if value < lower or value > upper:
                 raise ValueError(
@@ -496,7 +584,10 @@ def validate_run_a_fit_artifact(
         for model in ("choice_only", "M1", "M2", "M3")
     }
     pair_counts = (
-        fits.assign(participant=participant_values, model=models)
+        fits.assign(
+            participant=participant_values,
+            model=models,
+        )
         .groupby(["participant", "model"])
         .size()
     )
@@ -513,6 +604,7 @@ def validate_run_a_fit_artifact(
     normalized = fits.copy()
     normalized["choice_only"] = choice_only.to_numpy(dtype=bool)
     normalized["success"] = success.to_numpy(dtype=bool)
+
     return (
         normalized.loc[~normalized["choice_only"]].copy(),
         normalized.loc[normalized["choice_only"]].copy(),
@@ -529,10 +621,15 @@ def predict_from_estimates(
 ) -> pd.DataFrame:
     """Create trial-level latent values and predictive parameters from a fit."""
 
-    required = set(CHOICE_PARAMETER_NAMES if choice_only else FULL_PARAMETER_NAMES)
+    required = set(
+        CHOICE_PARAMETER_NAMES if choice_only else FULL_PARAMETER_NAMES
+    )
     missing = sorted(required - set(estimates))
     if missing:
-        raise ValueError(f"Fit is missing parameters required for prediction: {missing}")
+        raise ValueError(
+            f"Fit is missing parameters required for prediction: {missing}"
+        )
+
     conditions = trials["condition"].to_numpy(dtype=str)
     k = parameter_by_condition(
         conditions,
@@ -547,7 +644,10 @@ def predict_from_estimates(
         k,
         s0=scale,
     )
-    logits = choice_logits(np.exp(estimates["log_beta"]), values.delta_v)
+    logits = choice_logits(
+        np.exp(estimates["log_beta"]),
+        values.delta_v,
+    )
     output = pd.DataFrame(
         {
             "v_cert": values.v_cert,
@@ -557,9 +657,13 @@ def predict_from_estimates(
         },
         index=trials.index,
     )
+
     if not choice_only:
         predictor = rt_predictor(
-            model_name, values.v_cert, values.v_uncert, values.delta_v
+            model_name,
+            values.v_cert,
+            values.v_uncert,
+            values.delta_v,
         )
         output["rt_predictor"] = predictor
         output["rt_mu"] = rt_location(
@@ -570,11 +674,13 @@ def predict_from_estimates(
             predictor,
         )
         output["rt_sigma"] = np.exp(estimates["log_sigma"])
+
     return output
 
 
 def start_diagnostics_frame(results: list[FitResult]) -> pd.DataFrame:
     rows: list[dict[str, Any]] = []
+
     for fit in results:
         for start in fit.starts:
             row = {
@@ -596,6 +702,14 @@ def start_diagnostics_frame(results: list[FitResult]) -> pd.DataFrame:
                     )
                 },
             }
-            row.update(dict(zip(fit.parameter_names, start.estimates)))
+            row.update(
+                dict(
+                    zip(
+                        fit.parameter_names,
+                        start.estimates,
+                    )
+                )
+            )
             rows.append(row)
+
     return pd.DataFrame(rows)

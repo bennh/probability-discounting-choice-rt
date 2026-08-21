@@ -1,5 +1,16 @@
 {
-  "status": "not_run",
-  "fingerprint": null,
-  "note": "This tracked registry is changed to in_progress before the one-shot run and completed only after success."
+  "fingerprint": {
+    "config_sha256": "f5c9b4606ac8bdde31f0fb3019136e22e91825759e0ea1c4733d3879e39f7454",
+    "data_pipeline_sha256": "f71efda674188b9ec8628b61a0f2b64271849bb4c5f54ae6d6e3b0c20002333f",
+    "git_commit": "d0eaaa7ebfe4fcfa0bc3ac92444b2d8b5ef8f10c",
+    "processed_data_sha256": "e2bb506ef9bd17c4b8e062646715087a07621486b7af1360eb8ceed5703b1835",
+    "raw_archive_sha256": null,
+    "raw_data_sha256": "7f6b760de3f216e6eefd8024c82a5629fad721aadedf5a8a223b6a04f28c1d38",
+    "raw_source_mode": "direct_mat",
+    "run_a_fits_sha256": "b70d561ed21117106af814126293eea6ee6473d072e6e08170d8feb6827a575b",
+    "run_a_receipt_sha256": "01cbcda836d69bfc5e2475fb317721def53cb58e691e2053d8dc76b149f77d3a",
+    "runtime_sha256": "4d7c71ad74e5ded15364fc3a314ed4cf89909d7f524d8b8936312d49302ed545"
+  },
+  "started_at_utc": "2026-08-21T22:17:06.221079+00:00",
+  "status": "in_progress"
 }

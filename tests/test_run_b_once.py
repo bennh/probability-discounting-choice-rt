@@ -1,8 +1,10 @@
 import importlib.util
 import json
 from pathlib import Path
+from types import SimpleNamespace
 import tempfile
 import unittest
+from unittest.mock import patch
 
 import numpy as np
 import pandas as pd
@@ -21,25 +23,38 @@ class RunBOnceContractTests(unittest.TestCase):
         score_rows = []
         for participant in ("p1", "p2"):
             for trial, condition, choice_mask, rt_mask in (
-                (1, "R", True, True), (2, "L", False, False)
+                (1, "R", True, True),
+                (2, "L", False, False),
             ):
                 run_rows.append(
-                    {"participant": participant, "trial_index": trial,
-                     "condition": condition, "choice_included": choice_mask,
-                     "rt_included": rt_mask}
+                    {
+                        "participant": participant,
+                        "trial_index": trial,
+                        "condition": condition,
+                        "choice_included": choice_mask,
+                        "rt_included": rt_mask,
+                    }
                 )
                 for model in ("choice_only", "M1", "M2", "M3"):
                     full = model != "choice_only"
                     score_rows.append(
-                        {"participant": participant, "model": model,
-                         "trial_index": trial, "condition": condition,
-                         "choice_log_score": -1.0 if choice_mask else np.nan,
-                         "brier_score": 0.2 if choice_mask else np.nan,
-                         "choice_correct": 1.0 if choice_mask else np.nan,
-                         "rt_log_score": -1.0 if full and rt_mask else np.nan,
-                         "absolute_log_rt_error": 0.1 if full and rt_mask else np.nan,
-                         "absolute_rt_error_seconds": 0.2 if full and rt_mask else np.nan,
-                         "out_of_support": False if full else np.nan}
+                        {
+                            "participant": participant,
+                            "model": model,
+                            "trial_index": trial,
+                            "condition": condition,
+                            "choice_log_score": -1.0 if choice_mask else np.nan,
+                            "brier_score": 0.2 if choice_mask else np.nan,
+                            "choice_correct": 1.0 if choice_mask else np.nan,
+                            "rt_log_score": -1.0 if full and rt_mask else np.nan,
+                            "absolute_log_rt_error": 0.1
+                            if full and rt_mask
+                            else np.nan,
+                            "absolute_rt_error_seconds": 0.2
+                            if full and rt_mask
+                            else np.nan,
+                            "out_of_support": False if full else np.nan,
+                        }
                     )
         return pd.DataFrame(score_rows), pd.DataFrame(run_rows)
 
@@ -57,6 +72,35 @@ class RunBOnceContractTests(unittest.TestCase):
         ] = -2.0
         with self.assertRaises(RuntimeError):
             run_b_once.validate_score_artifact(scores, run_b, ["p1", "p2"])
+
+    def test_reliability_contract_accepts_exact_matrix(self):
+        results = [
+            SimpleNamespace(
+                participant=participant,
+                model=model,
+                success=False,
+            )
+            for participant in ("p1", "p2")
+            for model in ("choice_only", "M1", "M2", "M3")
+        ]
+
+        frame = pd.DataFrame(
+            {
+                "participant": [result.participant for result in results],
+                "model": [result.model for result in results],
+                "success": [result.success for result in results],
+            }
+        )
+
+        with patch.object(run_b_once, "fit_results_frame", return_value=frame):
+            returned_frame, failures = run_b_once.validate_reliability_matrix(
+                results,
+                ["p1", "p2"],
+                {},
+            )
+
+        pd.testing.assert_frame_equal(returned_frame, frame)
+        self.assertEqual(failures, 8)
 
     def test_atomic_json_writer_produces_complete_record(self):
         with tempfile.TemporaryDirectory() as directory:

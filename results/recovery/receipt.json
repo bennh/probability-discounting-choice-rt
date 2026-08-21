@@ -1,0 +1,33 @@
+{
+  "artifacts": {
+    "fit_results.csv": "b8b9127cfe6e1e26970279d2c733ad93d4e6528074c863e7bdab8313658db721",
+    "model_recovery_confusion.csv": "c9ae4c665c00a795cbfef7fb2bcc35a86b04f1a6dc78b32a93f58704a4727f97",
+    "parameter_recovery_metrics.csv": "07cb2549aa2adfff765a6a1d639e73eceb13849f2ed2eed0afaf5c5c4fcd3f97",
+    "replicate_seeds.csv": "7460b37b890cbc97171cff258d78b3d3de9f5a118443494bde55784faea32e25",
+    "run_b_model_scores.csv": "29d27f6ae9603baa65d79c46024ca1210e3063463880315a243f7eae2c42d5ae",
+    "runtime.json": "c5cd392504de4be500ccf9e75d03a1543455b580965cde5c665eb53e33cf1161",
+    "support_shift_summary.csv": "aeb2897e8c7ac816332eba0d1b3054e915e5b797f7981514a77330efc59cbf21",
+    "true_parameters.csv": "45ddf97ecc486bb11eb43066991ba21c766d3f1e258a016e49e3e02f29b3df4b"
+  },
+  "completed_at_utc": "2026-08-21T04:02:25.342663+00:00",
+  "config_sha256": "bba8443b4a8fffb74004b69030fd669b6ad5f3032c209d06aa7642e6eacd14a0",
+  "data_pipeline_sha256": "f71efda674188b9ec8628b61a0f2b64271849bb4c5f54ae6d6e3b0c20002333f",
+  "fit_failures": 0,
+  "git_commit": "eedb10fad34baaa9164db758a886f99304358357",
+  "issues": [],
+  "nominal_participants_per_model": 200,
+  "processed_data_sha256": "e2bb506ef9bd17c4b8e062646715087a07621486b7af1360eb8ceed5703b1835",
+  "runtime_sha256": "1daf8f87b03b0ee44e5a7bd43036083ee3ecc0b2cb65e2cc8ea2c753b3b63b91",
+  "status": "completed",
+  "stress_participants_per_model": 50,
+  "stress_source": "largest_abs_r_uncert",
+  "stress_source_participants": [
+    "c0ry57ax9",
+    "omy06qkfz",
+    "o7piq7dwr",
+    "orxx7nl6z",
+    "bh348lli7",
+    "vr0a0xs4k"
+  ],
+  "truth_source": "run_a_map"
+}

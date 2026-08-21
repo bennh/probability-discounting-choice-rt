@@ -7,22 +7,33 @@ import unittest
 YAML_AVAILABLE = importlib.util.find_spec("yaml") is not None
 
 
-@unittest.skipUnless(YAML_AVAILABLE, "PyYAML is unavailable in the current validation runtime")
+@unittest.skipUnless(
+    YAML_AVAILABLE,
+    "PyYAML is unavailable in the current validation runtime",
+)
 class ConfigTests(unittest.TestCase):
     def test_candidate_config_loads_and_blocks_formal_run_b(self):
-        from pd_project.config import assert_formal_run_b_authorized, load_config
+        from pd_project.config import (
+            assert_formal_run_b_authorized,
+            load_config,
+            validate_config,
+        )
 
         root = Path(__file__).resolve().parents[1]
         config = load_config(root / "config" / "analysis.yaml")
-        self.assertEqual(config["project"]["freeze_status"], "candidate")
+
+        candidate = copy.deepcopy(config)
+        candidate["project"]["freeze_status"] = "candidate"
+        candidate["project"]["formal_run_b_enabled"] = False
+
+        validate_config(candidate)
+
         with self.assertRaises(RuntimeError):
-            assert_formal_run_b_authorized(config)
+            assert_formal_run_b_authorized(candidate)
 
         missing_readiness = copy.deepcopy(config)
         missing_readiness["project"].pop("pipeline_readiness")
         with self.assertRaises(ValueError):
-            from pd_project.config import validate_config
-
             validate_config(missing_readiness)
 
         quoted_false = copy.deepcopy(config)
@@ -87,6 +98,37 @@ class ConfigTests(unittest.TestCase):
         ] = "true"
         with self.assertRaisesRegex(ValueError, "must remain true"):
             validate_config(quoted_optimizer_boolean)
+
+    def test_map_configuration_validation(self):
+        from pd_project.config import load_config, validate_config
+
+        root = Path(__file__).resolve().parents[1]
+        config = load_config(root / "config" / "analysis.yaml")
+
+        mle_config = copy.deepcopy(config)
+        mle_config["optimization"]["primary_estimator"] = "mle"
+        validate_config(mle_config)
+
+        map_config = copy.deepcopy(config)
+        map_config["optimization"]["primary_estimator"] = "map"
+        map_config["map_fallback"]["active"] = True
+        validate_config(map_config)
+
+        inactive_map = copy.deepcopy(config)
+        inactive_map["optimization"]["primary_estimator"] = "map"
+        inactive_map["map_fallback"]["active"] = False
+        with self.assertRaisesRegex(ValueError, "MAP estimation requires"):
+            validate_config(inactive_map)
+
+        invalid_estimator = copy.deepcopy(config)
+        invalid_estimator["optimization"]["primary_estimator"] = "invalid"
+        with self.assertRaisesRegex(ValueError, "primary_estimator"):
+            validate_config(invalid_estimator)
+
+        invalid_g95 = copy.deepcopy(config)
+        invalid_g95["map_fallback"]["weak_priors"]["log_b"]["resolved_g95"]["M1"] = 0.0
+        with self.assertRaisesRegex(ValueError, "resolved_g95.M1"):
+            validate_config(invalid_g95)
 
 
 if __name__ == "__main__":
