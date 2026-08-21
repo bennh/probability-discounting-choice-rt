@@ -1,4 +1,5 @@
 {
+  "completed_at_utc": "2026-08-21T22:24:29.311006+00:00",
   "fingerprint": {
     "config_sha256": "f5c9b4606ac8bdde31f0fb3019136e22e91825759e0ea1c4733d3879e39f7454",
     "data_pipeline_sha256": "f71efda674188b9ec8628b61a0f2b64271849bb4c5f54ae6d6e3b0c20002333f",
@@ -11,6 +12,33 @@
     "run_a_receipt_sha256": "01cbcda836d69bfc5e2475fb317721def53cb58e691e2053d8dc76b149f77d3a",
     "runtime_sha256": "4d7c71ad74e5ded15364fc3a314ed4cf89909d7f524d8b8936312d49302ed545"
   },
-  "started_at_utc": "2026-08-21T22:17:06.221079+00:00",
-  "status": "in_progress"
+  "output_sha256": {
+    "run_b_optimizer_starts.csv": "daf4e89e721a0c582d1f97f52767057a618e334275176446fb7be66be114aee5",
+    "run_b_reliability_fits.csv": "9c7e6016fa0658d2e50d576808f3f80574532841db5e0d1ba902cd89454726a0",
+    "trial_scores.csv": "6fa27a433db293cad02a24863edbbf10a86d62680a992603a1c27bbd825d27ad"
+  },
+  "run_b_reliability_failure_count": 5,
+  "run_b_reliability_failures": [
+    [
+      "dasemqdsv",
+      "M1"
+    ],
+    [
+      "nvbinkqjq",
+      "M1"
+    ],
+    [
+      "od96gfdym",
+      "M1"
+    ],
+    [
+      "p5lejwwzi",
+      "M1"
+    ],
+    [
+      "ru26ufirj",
+      "M1"
+    ]
+  ],
+  "status": "completed"
 }
